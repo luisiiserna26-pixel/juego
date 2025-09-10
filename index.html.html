@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Juego Memoria</title>
+  <style>
+    :root {
+      --ancho-carta: 120px;
+      --alto-carta: 160px;
+    }
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      margin: 0;
+      font-family: system-ui, Arial, Helvetica, sans-serif;
+      color: rgba(163, 41, 249, 0.58);
+      text-align: center;
+      background: #d10feb url("motos/moto.jpg") center/cover fixed no-repeat;
+      /* Diseño original conservado */
+      transition: background-image 1s ease-in-out;
+    }
+    .capa {
+      min-height: 100vh;
+      padding: 24px 16px 40px;
+      background: radial-gradient(transparent, rgba(0, 0, 0, 0.447) 60%);
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-weight: 800;
+    }
+    #panel {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: center;
+      background: rgba(150, 93, 181, 0.307);
+      padding: 10px 12px;
+      border-radius: 10px;
+    }
+    #panel .dato {
+      background: #493680;
+      padding: 4px 8px;
+      border-radius: 8px;
+    }
+    #btnComenzar {
+      cursor: pointer;
+      border: 0;
+      border-radius: 10px;
+      padding: 8px 14px;
+      background: #ec69df91;
+      color: #000000;
+      font-weight: 700;
+    }
+    #btnComenzar:hover {
+      background: #5c2670;
+    }
+    #tablero {
+      width: min(95vh, 560px);
+      margin: 18px auto 10px;
+      display: grid;
+      grid-template-columns: repeat(4, var(--ancho-carta));
+      gap: 10px;
+      justify-content: center;
+    }
+    .carta {
+      width: var(--ancho-carta);
+      height: var(--alto-carta);
+      position: relative;
+      perspective: 800px;
+      cursor: pointer;
+      user-select: none;
+    }
+    .reverso {
+      position: absolute;
+      inset: 0;
+      border-radius: 12px;
+      backface-visibility: hidden;
+      transition: transform 0.6s;
+      background: purple url('fuera/p.jpg') center/cover no-repeat;
+    }
+    .cara {
+      position: absolute;
+      inset: 0;
+      border-radius: 12px;
+      backface-visibility: hidden;
+      transform: rotateY(180deg);
+      overflow: hidden;
+    }
+    .cara img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .carta .cara, .carta .reverso {
+      transition: transform 0.6s;
+      transform-style: preserve-3d;
+      will-change: transform;
+    }
+    .carta.volteada .cara {
+      transform: rotateY(0);
+    }
+    .carta.volteada .reverso {
+      transform: rotateY(180deg);
+    }
+    .carta.acertada .cara {
+      filter: grayscale(0.2) brightness(1.05);
+    }
+    .carta.acertada::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: 12px;
+      background: url('motos/imagen.jpg') center/55px 55px no-repeat, rgba(197, 197, 197, 0.744);
+    }
+    table {
+      margin: 20px auto;
+      border-collapse: collapse;
+      width: 90%;
+      max-width: 600px;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    th, td {
+      border: 1px solid #444;
+      padding: 8px 10px;
+      font-size: 14px;
+      text-align: left;
+    }
+    th {
+      background: #b17eefda;
+      color: rgb(142, 64, 186);
+    }
+    th:hover {
+      background: #0e0015cf;
+    }
+    .center {
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="capa">
+    <h1>JUEGO DE MEMORIA</h1>
+    <div id="panel">
+      <span id="datoJugador" class="dato">Jugador: --</span>
+      <span id="datoNivel" class="dato">Nivel: 1</span>
+      <span id="datoAciertos" class="dato">Aciertos: 0</span>
+      <span id="datoIntentos" class="dato">Intentos: 0</span>
+      <span id="datoTiempo" class="dato">Tiempo: 30</span>
+      <button id="btnComenzar">Comenzar</button>
+    </div>
+
+    <h3 class="center">Tablero de Juego</h3>
+    <div id="tablero" aria-label="Tablero de cartas"></div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Jugador</th>
+          <th>Nivel</th>
+          <th>Intentos</th>
+          <th>Aciertos</th>
+          <th>Tiempo Restante</th>
+        </tr>
+      </thead>
+      <tbody id="tablaJugadores"></tbody>
+    </table>
+  </div>
+
+  <!-- Audios -->
+  <audio id="audioClickMp3" src="sonidos/click.mp3"></audio>
+  <audio id="audioDerrotaMp3" src="sonidos/derrota.mp3"></audio>
+  <audio id="audioErrorMp3" src="sonidos/error.mp3"></audio>
+  <audio id="audioJugarMp3" src="sonidos/jugar.mp3"></audio>
+  <audio id="audioSuccessMp3" src="sonidos/success.mp3"></audio>
+  <audio id="audioTriunfoMp3" src="sonidos/triunfo.mp3"></audio>
+
+  <script>
+    let nombreJugador = "";
+    let nivelActual = 1;
+    let aciertosEnNivel = 0;
+    let intentosTotales = 0;
+    const tiempoPorNivel = 30;
+    let tiempoRestante = tiempoPorNivel;
+    let cartasVolteadas = [];
+    let bloqueoTablero = false;
+    let idReloj = null;
+    let partidasJugadas = [];
+
+    const imagenesCarros = [
+      'carros/1.jpeg','carros/2.jpeg','carros/3.jpeg',
+      'carros/4.jpeg','carros/5.jpeg','carros/6.jpeg'
+    ];
+    const imagenesMotos = [
+      'motos/1.jpg','motos/2.jpg','motos/3.jpg',
+      'motos/4.jpg','motos/5.jpg','motos/6.jpg'
+    ];
+    const nivelesImagenes = [imagenesCarros, imagenesMotos];
+    const fondosNivel = ['motos/moto.jpg','carros/carro.jpg'];
+
+    const elTablero = document.getElementById('tablero');
+    const elBtnComenzar = document.getElementById('btnComenzar');
+    const elDatoJugador = document.getElementById('datoJugador');
+    const elDatoNivel = document.getElementById('datoNivel');
+    const elDatoAciertos = document.getElementById('datoAciertos');
+    const elDatoIntentos = document.getElementById('datoIntentos');
+    const elDatoTiempo = document.getElementById('datoTiempo');
+    const tablaJugadores = document.getElementById('tablaJugadores');
+
+    const audioClick = document.getElementById('audioClickMp3');
+    const audioError = document.getElementById('audioErrorMp3');
+    const audioSuccess = document.getElementById('audioSuccessMp3');
+    const audioTriunfo = document.getElementById('audioTriunfoMp3');
+    const audioDerrota = document.getElementById('audioDerrotaMp3');
+    const audioJugar = document.getElementById('audioJugarMp3');
+
+    elBtnComenzar.addEventListener('click', iniciarJuego);
+
+    function iniciarJuego() {
+      const nombre = prompt("Ingresa tu nombre:");
+      if (!nombre || !nombre.trim()) return;
+      nombreJugador = nombre.trim();
+      nivelActual = 1;
+      aciertosEnNivel = 0;
+      intentosTotales = 0;
+      tiempoRestante = tiempoPorNivel;
+      try { audioJugar.play(); } catch(e){}
+      actualizarPanel();
+      crearTableroParaNivel(nivelActual);
+      iniciarReloj();
+    }
+
+    function actualizarPanel() {
+      elDatoJugador.textContent = "Jugador: " + nombreJugador;
+      elDatoNivel.textContent = "Nivel: " + nivelActual;
+      elDatoAciertos.textContent = "Aciertos: " + aciertosEnNivel;
+      elDatoIntentos.textContent = "Intentos: " + intentosTotales;
+      elDatoTiempo.textContent = "Tiempo: " + tiempoRestante;
+    }
+
+    function crearTableroParaNivel(nivel) {
+      elTablero.innerHTML = '';
+      cartasVolteadas = [];
+      bloqueoTablero = false;
+
+      if (nivel > nivelesImagenes.length) {
+        return victoriaFinal();
+      }
+
+      // Fondo dinámico según nivel
+      document.body.style.background = `#d10feb url("${fondosNivel[nivel - 1]}") center/cover fixed no-repeat`;
+
+      const lista = nivelesImagenes[nivel - 1];
+      const cartas = mezclar([...lista, ...lista]);
+      aciertosEnNivel = 0;
+
+      cartas.forEach(ruta => {
+        const carta = document.createElement('div');
+        carta.className = 'carta';
+        carta.dataset.ruta = ruta;
+
+        const cara = document.createElement('div');
+        cara.className = 'cara';
+        const img = document.createElement('img');
+        img.src = ruta;
+        cara.appendChild(img);
+
+        const reverso = document.createElement('div');
+        reverso.className = 'reverso';
+
+        carta.append(cara, reverso);
+        carta.addEventListener('click', () => voltearCarta(carta));
+        elTablero.appendChild(carta);
+      });
+
+      actualizarPanel();
+    }
+
+    function mezclar(arr) {
+      return arr.sort(() => Math.random() - 0.5);
+    }
+
+    function voltearCarta(carta) {
+      if (bloqueoTablero || carta.classList.contains('volteada')) return;
+      carta.classList.add('volteada');
+      cartasVolteadas.push(carta);
+      audioClick.play();
+
+      if (cartasVolteadas.length === 2) {
+        intentosTotales++;
+        const [c1,c2] = cartasVolteadas;
+        if (c1.dataset.ruta === c2.dataset.ruta) {
+          aciertosEnNivel++;
+          c1.classList.add('acertada');
+          c2.classList.add('acertada');
+          audioSuccess.play();
+
+          if (aciertosEnNivel === nivelesImagenes[nivelActual - 1].length) {
+            bloqueoTablero = true;
+            setTimeout(() => pasarSiguienteNivel(), 600);
+          }
+        } else {
+          bloqueoTablero = true;
+          audioError.play();
+          setTimeout(() => {
+            c1.classList.remove('volteada');
+            c2.classList.remove('volteada');
+            bloqueoTablero = false;
+          }, 800);
+        }
+        cartasVolteadas = [];
+        actualizarPanel();
+      }
+    }
+
+    function iniciarReloj() {
+      clearInterval(idReloj);
+      idReloj = setInterval(() => {
+        tiempoRestante--;
+        actualizarPanel();
+        if (tiempoRestante <= 0) {
+          clearInterval(idReloj);
+          bloqueoTablero = true;
+          audioDerrota.play();
+          alert('Se acabó el tiempo. ¡Perdiste!');
+          registrarPartida();
+          crearTableroParaNivel(nivelActual);
+          iniciarReloj();
+        }
+      }, 1000);
+    }
+
+    function pasarSiguienteNivel() {
+      clearInterval(idReloj);
+      nivelActual++;
+      tiempoRestante = tiempoPorNivel;
+      registrarPartida();
+      crearTableroParaNivel(nivelActual);
+      iniciarReloj();
+    }
+
+    function victoriaFinal() {
+      clearInterval(idReloj);
+      bloqueoTablero = true;
+      audioTriunfo.play();
+      alert(`🎉 ¡Felicidades ${nombreJugador}! Completaste todos los niveles.`);
+      registrarPartida(true);
+    }
+
+    function registrarPartida(completado = false) {
+      partidasJugadas.push({
+        jugador: nombreJugador,
+        nivel: completado ? nivelActual : nivelActual,
+        intentos: intentosTotales,
+        aciertos: aciertosEnNivel,
+        tiempo: tiempoRestante
+      });
+      actualizarTabla();
+    }
+
+    function actualizarTabla() {
+      tablaJugadores.innerHTML = '';
+      partidasJugadas.forEach((p,i) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${i+1}</td>
+          <td>${p.jugador}</td>
+          <td>${p.nivel}</td>
+          <td>${p.intentos}</td>
+          <td>${p.aciertos}</td>
+          <td>${p.tiempo}</td>
+        `;
+        tablaJugadores.appendChild(tr);
+      });
+    }
+  </script>
+</body>
+</html>
